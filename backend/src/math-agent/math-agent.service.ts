@@ -27,7 +27,7 @@ export class MathAgentService implements OnModuleInit {
       this.llm = new ChatOpenAI({
         apiKey: this.openAIConfig.getApiKey(),
         modelName: this.openAIConfig.getModelName(),
-        temperature: this.openAIConfig.getTemperature(),
+        temperature: Number(this.openAIConfig.getTemperature()),
         maxTokens: Number(this.openAIConfig.getMaxTokens()),
       });
       
