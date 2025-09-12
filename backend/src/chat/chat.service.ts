@@ -1,19 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ChatRequestDto } from './dto/chat-request.dto';
 import { ChatResponseDto, AgentWorkflowStep } from './dto/chat-response.dto';
 import { RouterAgentService } from '../router-agent/router-agent-service';
 import { KnowledgeAgentService } from '../knowledge-agent/knowledge-agent.service';
 import { MathAgentService } from '../math-agent/math-agent.service';
+import { AgentLogger, StructuredLoggerService } from '../common/structured-logger.service';
 
 @Injectable()
 export class ChatService {
-  private readonly logger = new Logger(ChatService.name);
+  private readonly logger: AgentLogger;
 
   constructor(
     private readonly routerAgentService: RouterAgentService,
     private readonly knowledgeAgentService: KnowledgeAgentService,
     private readonly mathAgentService: MathAgentService,
-  ) {}
+    private readonly loggerService: StructuredLoggerService
+  ) {
+    this.logger = this.loggerService.createAgentLogger('ChatService');
+  }
 
   async processMessage(chatRequest: ChatRequestDto): Promise<ChatResponseDto> {
     const workflow: AgentWorkflowStep[] = [];
@@ -31,12 +35,20 @@ export class ChatService {
       
       if (routerDecision.agent === 'KNOWLEDGE') {
         workflow.push({ agent: 'KnowledgeAgent' });
-        const knowledgeResult = await this.knowledgeAgentService.processQuestion(chatRequest.message);
+        const knowledgeResult = await this.knowledgeAgentService.processQuestion(
+          chatRequest.message,
+          chatRequest.conversation_id,
+          chatRequest.user_id
+        );
         agentResponse = this.addPersonality(knowledgeResult.answer);
         sourceAgentResponse = knowledgeResult.answer;
       } else {
         workflow.push({ agent: 'MathAgent' });
-        const mathResult = await this.mathAgentService.calculateExpression(chatRequest.message);
+        const mathResult = await this.mathAgentService.calculateExpression(
+          chatRequest.message,
+          chatRequest.conversation_id,
+          chatRequest.user_id
+        );
         agentResponse = this.addPersonality(mathResult.answer);
         sourceAgentResponse = mathResult.answer;
       }
@@ -52,7 +64,13 @@ export class ChatService {
       };
 
     } catch (error) {
-      this.logger.error('Error processing chat message:', error);
+      this.logger.error({
+        conversation_id: chatRequest.conversation_id || 'unknown',
+        user_id: chatRequest.user_id || 'unknown',
+        content: `Error processing chat message: ${error.message}`,
+        error: error.stack,
+        execution_time: Date.now() - startTime
+      });
       throw error;
     }
   }
@@ -79,15 +97,12 @@ export class ChatService {
     processingTime: number
   ): void {
     this.logger.log({
-      message: 'Chat message processed',
-      context: {
-        user_id: chatRequest.user_id,
-        conversation_id: chatRequest.conversation_id,
-        original_message: chatRequest.message,
-        workflow: workflow,
-        processing_time_ms: processingTime,
-        timestamp: new Date().toISOString(),
-      },
+      conversation_id: chatRequest.conversation_id || 'unknown',
+      user_id: chatRequest.user_id || 'unknown',
+      execution_time: processingTime,
+      content: chatRequest.message,
+      decision: workflow.map(step => step.agent).join(' → '),
+      workflow: workflow
     });
   }
 }

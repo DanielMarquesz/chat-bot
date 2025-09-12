@@ -1,11 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { RoutingDecision, AgentResponse } from '../interfaces/routing-decision.interface';
 import { KnowledgeAgentService } from '../knowledge-agent/knowledge-agent.service';
 import { MathAgentService } from '../math-agent/math-agent.service';
+import { AgentLogger, StructuredLoggerService } from '../common/structured-logger.service';
 
 @Injectable()
 export class RouterAgentService {
-  private readonly logger = new Logger(RouterAgentService.name);
+  private readonly logger: AgentLogger;
   private readonly mathPatterns = [
     /quanto é\s+[\d\+\-\*\/\(\)\.\s]+/i,
     /how much is\s+[\d\+\-\*\/\(\)\.\s]+/i,
@@ -17,7 +18,10 @@ export class RouterAgentService {
   constructor(
     private readonly knowledgeAgentService: KnowledgeAgentService,
     private readonly mathAgentService: MathAgentService,
-  ) {}
+    private readonly loggerService: StructuredLoggerService,
+  ) {
+    this.logger = this.loggerService.createAgentLogger('RouterAgent');
+  }
 
   async routeMessage(message: string): Promise<RoutingDecision> {
     const startTime = Date.now();
@@ -103,21 +107,17 @@ export class RouterAgentService {
 
   private logDecision(message: string, decision: RoutingDecision): void {
     this.logger.log({
-      message: 'Routing decision made',
-      context: {
-        originalMessage: message,
-        decision: {
-          agent: decision.agent,
-          confidence: decision.confidence,
-          reason: decision.reason,
-          processingTime: decision.processingTime,
-          timestamp: new Date().toISOString(),
-        },
-      },
+      conversation_id: 'unknown', // This should be passed from the controller
+      user_id: 'unknown', // This should be passed from the controller
+      execution_time: decision.processingTime,
+      decision: decision.agent,
+      content: message,
+      confidence: decision.confidence,
+      reason: decision.reason
     });
   }
 
-  async executeWithAgent(message: string, agent: 'KNOWLEDGE' | 'MATH'): Promise<AgentResponse> {
+  async executeWithAgent(message: string, agent: 'KNOWLEDGE' | 'MATH', conversation_id?: string, user_id?: string): Promise<AgentResponse> {
     try {
       if (agent === 'KNOWLEDGE') {
         return await this.knowledgeAgentService.processQuestion(message);
@@ -125,7 +125,12 @@ export class RouterAgentService {
         return await this.mathAgentService.calculateExpression(message);
       }
     } catch (error) {
-      this.logger.error(`Error executing with ${agent} agent:`, error);
+      this.logger.error({
+        conversation_id: conversation_id || 'unknown',
+        user_id: user_id || 'unknown',
+        content: `Error executing with ${agent} agent: ${error.message}`,
+        error: error.stack
+      });
       throw error;
     }
   }

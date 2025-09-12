@@ -1,17 +1,23 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { OpenAIConfigService } from 'src/common/openai-config.service';
 import { AgentResponse } from 'src/interfaces/routing-decision.interface';
+import { AgentLogger, StructuredLoggerService } from 'src/common/structured-logger.service';
 
 
 @Injectable()
 export class MathAgentService implements OnModuleInit {
-  private readonly logger = new Logger(MathAgentService.name);
+  private readonly logger: AgentLogger;
   private llm: ChatOpenAI;
 
-  constructor(private readonly openAIConfig: OpenAIConfigService) {}
+  constructor(
+    private readonly openAIConfig: OpenAIConfigService,
+    private readonly loggerService: StructuredLoggerService
+  ) {
+    this.logger = this.loggerService.createAgentLogger('MathAgent');
+  }
 
   onModuleInit() {
     this.initializeLLM();
@@ -19,7 +25,11 @@ export class MathAgentService implements OnModuleInit {
 
   private initializeLLM() {
     if (!this.openAIConfig.isConfigured()) {
-      this.logger.warn('OpenAI API key not configured. MathAgent will use fallback calculations.');
+      this.logger.warn({
+        conversation_id: 'system',
+        user_id: 'system',
+        content: 'OpenAI API key not configured. MathAgent will use fallback calculations.'
+      });
       return;
     }
 
@@ -31,13 +41,22 @@ export class MathAgentService implements OnModuleInit {
         maxTokens: Number(this.openAIConfig.getMaxTokens()),
       });
       
-      this.logger.log('OpenAI LLM initialized successfully');
+      this.logger.log({
+        conversation_id: 'system',
+        user_id: 'system',
+        content: 'OpenAI LLM initialized successfully'
+      });
     } catch (error) {
-      this.logger.error('Failed to initialize OpenAI LLM:', error);
+      this.logger.error({
+        conversation_id: 'system',
+        user_id: 'system',
+        content: `Failed to initialize OpenAI LLM: ${error.message}`,
+        error: error.stack
+      });
     }
   }
 
-  async calculateExpression(expression: string): Promise<AgentResponse> {
+  async calculateExpression(expression: string, conversation_id?: string, user_id?: string): Promise<AgentResponse> {
     const startTime = Date.now();
     
     try {      
@@ -45,7 +64,7 @@ export class MathAgentService implements OnModuleInit {
         const result = await this.interpretWithLLM(expression);
         const executionTime = Date.now() - startTime;
 
-        this.logExecution(expression, result, executionTime, true);
+        this.logExecution(expression, result, executionTime, true, conversation_id, user_id);
 
         return {
           success: true,
@@ -56,7 +75,7 @@ export class MathAgentService implements OnModuleInit {
         const result = this.fallbackCalculation(expression);
         const executionTime = Date.now() - startTime;
 
-        this.logExecution(expression, result, executionTime, false);
+        this.logExecution(expression, result, executionTime, false, conversation_id, user_id);
 
         return {
           success: true,
@@ -65,7 +84,13 @@ export class MathAgentService implements OnModuleInit {
         };
       }
     } catch (error) {
-      this.logger.error('Error in MathAgent:', error);
+      this.logger.error({
+        conversation_id: conversation_id || 'unknown',
+        user_id: user_id || 'unknown',
+        content: `Error in MathAgent: ${error.message}`,
+        error: error.stack,
+        execution_time: Date.now() - startTime
+      });
       const fallbackResult = this.fallbackCalculation(expression);
       
       return {
@@ -99,7 +124,12 @@ export class MathAgentService implements OnModuleInit {
       return response.content.toString().trim();
 
     } catch (error) {
-      this.logger.error('LLM invocation failed, using fallback:', error);
+      this.logger.error({
+        conversation_id: 'unknown',
+        user_id: 'unknown',
+        content: `LLM invocation failed, using fallback: ${error.message}`,
+        error: error.stack
+      });
       return this.fallbackCalculation(message);
     }
   }
@@ -148,17 +178,17 @@ export class MathAgentService implements OnModuleInit {
     expression: string, 
     result: string, 
     executionTime: number,
-    usedLLM: boolean
+    usedLLM: boolean,
+    conversation_id?: string,
+    user_id?: string
   ): void {
     this.logger.log({
-      message: 'MathAgent execution',
-      context: {
-        expression,
-        result,
-        executionTime,
-        usedLLM,
-        timestamp: new Date().toISOString(),
-      },
+      conversation_id: conversation_id || 'unknown',
+      user_id: user_id || 'unknown',
+      execution_time: executionTime,
+      content: result,
+      expression,
+      used_llm: usedLLM
     });
   }
 }

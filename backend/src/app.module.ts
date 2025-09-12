@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { ChatModule } from './chat/chat.module';
 import { ConfigModule } from '@nestjs/config';
 import { SecurityModule } from './security/security.module';
+import { LoggerModule } from './common/logger.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { SecurityModule } from './security/security.module';
       isGlobal: true,
       envFilePath: '.env'
     }),
+    LoggerModule,
     SecurityModule,
     ChatModule
   ],
