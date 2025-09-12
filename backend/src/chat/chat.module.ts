@@ -5,9 +5,10 @@ import { RouterAgentService } from "src/router-agent/router-agent-service";
 import { MathAgentService } from "src/math-agent/math-agent.service";
 import { OpenAIConfigService } from "src/common/openai-config.service";
 import { KnowledgeAgentModule } from "src/knowledge-agent/knowledge-agent.module";
+import { SecurityModule } from "src/security/security.module";
 
 @Module({  
-  imports: [KnowledgeAgentModule],
+  imports: [KnowledgeAgentModule, SecurityModule],
   controllers: [ChatController],
   providers: [ChatService, RouterAgentService, MathAgentService, OpenAIConfigService],
 })
